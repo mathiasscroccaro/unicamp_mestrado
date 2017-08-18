@@ -42,14 +42,24 @@ class Interface(QtGui.QWidget):
     def __init__(self):
         super(Interface, self).__init__()
         
+        # Inicializa botões, gráfico, labels e inpubox
         self.iniciaWidgets()
         
     def iniciaWidgets(self):
+        
+        # Cria os parametros se alarme e atuador
         
         self.alarme = "0"
         self.atuador = "0"
         
         # Cria os objetos widgets de interação com o usuário
+        
+        self.imagem = QtGui.QImage("unicamp.gif")
+        self.labelUnicamp = QtGui.QLabel(self)
+        self.labelUnicamp.setPixmap(QtGui.QPixmap.fromImage(self.imagem).scaled(150,150,1))
+        self.labelUnicamp.show()
+        self.labelUnicamp.move(620,450)
+        self.labelUnicamp.resize(150,150)
         
         self.labelBaudRate = QtGui.QLabel("Velocidade de conexao:",self)
         self.labelPorta = QtGui.QLabel("Porta de conexao\ncom Arduino:",self)
@@ -58,10 +68,6 @@ class Interface(QtGui.QWidget):
         self.grafico = pyqtgraph.PlotWidget(self)
         self.botaoConexao = QtGui.QPushButton("Conectar",self)
         
-        self.dadosVisiveis = []
-        self.curva = pyqtgraph.PlotCurveItem()
-        self.grafico.addItem(self.curva)
-        
         self.inputSetPoint = QtGui.QLineEdit("18",self)
         self.inputHisterese = QtGui.QLineEdit("1",self)
         self.inputAlarme = QtGui.QLineEdit("30",self)
@@ -69,6 +75,12 @@ class Interface(QtGui.QWidget):
         self.labelSetPoint = QtGui.QLabel("SetPoint:",self)
         self.labelHisterese = QtGui.QLabel("Histerese:",self)
         self.labelAlarme = QtGui.QLabel("Alarme:",self)
+        
+        self.dadosVisiveis = []
+        self.curva = pyqtgraph.PlotCurveItem()
+        self.grafico.addItem(self.curva)
+        self.grafico.setLabel('bottom','Amostra [n]')
+        self.grafico.setLabel('left','Temperatura [C]')        
         
         # Cria threads para comunicação serial
         self.serialCom = serialThread()
@@ -89,24 +101,21 @@ class Interface(QtGui.QWidget):
         self.labelHisterese.move(610,255)
         self.labelSetPoint.move(610,185)
         self.labelAlarme.move(610,325)
+        
         # Redimensionando os objetos
         
         self.grafico.resize(600,600)
         self.grafico.setXRange(0,100)
         self.grafico.setYRange(15,35)
         
-        self.grafico.setBackground(0)
-        
         # Conecta sinais dos objetos
         
         self.botaoConexao.clicked.connect(self.conectarSerial)
-        #self.inputAlarme.textChanged.connect(self.enviarSerial)
-        #self.inputHisterese.textChanged.connect(self.enviarSerial)
-        #self.inputSetPoint.textChanged.connect(self.enviarSerial)
-        
-        # Alterando parâmetros da janela principal 
         
         self.connect(self.serialCom,self.serialCom.sinalRecebeuDado,self.atualizaGrafico)
+        
+        # Alterando parâmetros da janela principal 
+         
         
         self.resize(800,600)
         self.setWindowTitle('Leitura da temperatura do Arduino')
@@ -133,34 +142,38 @@ class Interface(QtGui.QWidget):
     
     
     def atualizaGrafico(self,dado):
-                
+        
+        ''' Função de callback quando um dado é recebido via serial '''
+        
+        # realiza conversão do dado recebido para a unidade de temperatura       
         dado = (dado/1023.0)*20.0+15
         
+        # Controle do atuador: se muito quente, desliga o aquecedor. Se frio, liga o aquecedor       
         antigo = self.atuador
-        
         if (dado > float(self.inputSetPoint.text()) + float(self.inputHisterese.text())):
             self.atuador = "0"
         elif (dado < float(self.inputSetPoint.text()) - float(self.inputHisterese.text())):
             self.atuador = "1"
         else:
             self.atuador = "0"
-        
+        # Se o atuador foi alterado, enviar comando ao arduino
         if (self.atuador is not antigo):
-            self.serialCom.enviarSerial(self.alarme + self.atuador)
-            
+            self.serialCom.enviarSerial(self.alarme + self.atuador)        
         
+        # Controle do alarme: se passar a temperatura, aciona o alarme e altera cor do gráfico
         antigo = self.alarme
-        
         if (dado > float(self.inputAlarme.text())):
             self.alarme = "1"
             self.grafico.setBackground(0)
         else:
             self.alarme = "0"
             self.grafico.setBackground("default")
-        
+        # Se o alarme foi alterado, enviar comando ao arduino
         if (self.alarme is not antigo):
             self.serialCom.enviarSerial(self.alarme + self.atuador)
         
+        
+        # Atualiza dados do gráfico
         self.dadosVisiveis.append(dado)
         if (len(self.dadosVisiveis) == 100):
             del self.dadosVisiveis[0]
